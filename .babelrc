@@ -1,0 +1,22 @@
+{
+    "presets": [
+        [
+            "next/babel",
+            {
+                "useBuiltIns": "entry",
+                "corejs": 3
+            }
+        ]
+    ],
+    "plugins": [
+        [
+            "styled-components",
+            {
+                "ssr": true,
+                "displayName": true,
+                "preprocess": false
+            }
+        ],
+        "@babel/plugin-proposal-object-rest-spread"
+    ]
+}

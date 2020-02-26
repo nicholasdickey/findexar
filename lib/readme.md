@@ -1,0 +1,1 @@
+Shared between web and react native versions
