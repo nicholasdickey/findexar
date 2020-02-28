@@ -5,12 +5,16 @@ const express = require("express");
 const http = require("http");
 const next = require("next");
 const session = require("express-session");
+
 // 1 - importing dependencies
 const passport = require("passport");
 const Auth0Strategy = require("passport-auth0");
 const uid = require('uid-safe');
 const authRoutes = require("./auth-routes");
-const thoughtsAPI = require("./api");
+//const thoughtsAPI = require("./api/api");
+const apollo = require('./api/apollo');
+
+
 
 const dev = process.env.NODE_ENV !== "production";
 const app = next({
@@ -56,7 +60,7 @@ app.prepare().then(() => {
     server.use(passport.session());
     server.use(authRoutes);
 
-    server.use(thoughtsAPI);
+    //server.use(thoughtsAPI);
 
     // 6 - you are restricting access to some routes
     const restrictAccess = (req, res, next) => {
@@ -65,8 +69,8 @@ app.prepare().then(() => {
     };
 
     server.use("/admin", restrictAccess);
-    server.use("/share-thought", restrictAccess);
-
+    // server.use("/graphql", restrictAccess);
+    apollo({ app: server });
     // handling everything else with Next.js
     server.get("*", handle);
 
