@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "NODE_ENV=dev node ./src/server.js",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "test": "jest jest/  --detectOpenHandles"
   },
   "dependencies": {
     "@material-ui/core": "^4.9.4",
@@ -42,5 +43,16 @@
     "uid-safe": "^2.1.5",
     "util": "^0.12.2",
     "window-or-global": "^1.0.1"
+  },
+  "devDependencies": {
+    "@babel/plugin-proposal-object-rest-spread": "^7.0.0",
+    "babel-eslint": "^10.0.1",
+    "babel-jest": "24.1.0",
+    "babel-preset-env": "^1.7.0",
+    "eslint": "^5.16.0",
+    "eslint-config-airbnb-base": "^13.1.0",
+    "eslint-plugin-jest": "^22.6.4",
+    "eslint-plugin-react": "^7.12.4",
+    "jest": "^24.9.0"
   }
 }

@@ -1,8 +1,16 @@
 
 const chalk = require('chalk');
 chalk.enabled = true;
-const l = console.log;
-const microtime = () => (new Date).getTime() | 0
+let lg = false;
+const allowLog = () => lg = true;
+const l = (...args) => {
+    if (lg) {
+        console.log(...args);
+    }
+}
+
+const microtime = () => Math.abs((new Date).getTime())
+
 function logTime({ t1, threadid, name }) {
 
     const t2 = microtime(true);
@@ -19,4 +27,4 @@ function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-module.exports = { l, chalk, microtime, logTime, logEnter, sleep }
+module.exports = { allowLog, l, chalk, microtime, logTime, logEnter, sleep }
