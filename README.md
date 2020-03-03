@@ -1,6 +1,6 @@
 FINDEXAR
 
-Fast Product Search, featuring F-Index: product favorability index, a consumer sentiment indicator
+Fast Product Search, featuring F-index: the product favorability index, a consumer sentiment indicator
 
 
 Developed by Nicholas Dickey
