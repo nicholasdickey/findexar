@@ -1,6 +1,6 @@
 FINDEXAR
 
-All Consumer Reviews In One Place - Fast.
+Fast Product Search, featuring F-Index: product favorability index, a consumer sentiment indicator
 
 
 Developed by Nicholas Dickey
