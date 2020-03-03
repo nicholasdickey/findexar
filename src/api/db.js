@@ -212,6 +212,98 @@ const dbCategory = async ({ query, sessionid, threadid, category, username, acti
     l("retrning from db.js:", result)
     return result;
 }
+const dbUserAuth = async ({ query, sessionid, threadid, user, username, action }) => {
+    let { slug, role, micros } = user;
+    micros = micros || microtime();
+    switch (action) {
+        case 'fetch': {
+            sql = `SELECT * from users where slug='${slug}'`;
+            let rows = await query(`SELECT * from users where slug=?`, [slug]);
+            await dbLog({ query, type: 'SQL', body: `{sql:${sql}, res:${rows ? JSON.stringify(rows, null, 4) : 'null'}}`, threadid, sessionid, username });
+            if (rows && rows.length) {
+                result = {
+                    success: true,
+                    user: rows[0]
+                }
+            }
+            else {
+                result = {
+                    success: false,
+                    message: `No users matched the slug ${slug}`
+                }
+            }
+            break;
+        }
+        default: {//update,insert
+
+            if (action != 'insert') {
+                sql = `SELECT * from users where slug='${slug}'`;
+                let rows = await query(`SELECT * from users where slug=?`, [slug]);
+                let res = false;
+                if (rows)
+                    res = rows[0];
+                await dbLog({ query, type: 'SQL', body: `{sql:${sql}, res:${rows ? JSON.stringify(rows, null, 4) : 'null'}}`, threadid, sessionid, slug });
+                if (res) {
+                    if (res.micros < micros) {
+                        sql = `UPDATE users set role='${role}, micros=${micros},updatedBy=${username}, updated=now() where slug='${slug}`;
+                        res = await query(`UPDATE  users set role=?,micros=?,updatedBy=?,updated=now()  where slug=?`, [role, micros, username, slug]);
+                        await dbLog({ query, type: 'SQL', body: `{sql:${sql}, res:${res ? JSON.stringify(res, null, 4) : 'null'}}`, threadid, sessionid, username });
+                        if (res && res.affectedRows) {
+                            result = {
+                                success: true,
+                                slug: slug
+                            }
+                        }
+                        else {
+                            let cap = JSON.stringify(
+                                {
+                                    name,
+                                    description,
+                                    micros,
+                                    username,
+                                    slug,
+                                    categorySlug,
+                                    brandSlug
+                                }
+                            )
+                            result = {
+                                success: false,
+                                message: `Unable to update users with slug ${slug}, update values ${cap}`
+                            }
+                        }
+                    }
+                }
+                else action = 'insert';
+            }
+            if (action == 'insert') {
+                sql = `INSERT into users (role,micros,slug,createdBy) VALUES ('${role}',${micros},'${slug}','${username}')`
+                let res = false;
+                try {
+                    res = await query(`INSERT into users (role,micros,slug,createdBy) VALUES (?,?,?,?)`, [role, micros, slug, username]);
+                }
+                catch (x) {
+                    l("HANDLED DB EXCEPTION:", x)
+                }
+                await dbLog({ query, type: 'SQL', body: `{sql:${sql}, res:${res ? JSON.stringify(res, null, 4) : 'null'}}`, threadid, sessionid, username });
+                if (res && res.affectedRows) {
+                    result = {
+                        success: true,
+                        slug
+                    }
+                }
+                else {
+                    let cap = JSON.stringify({ role, micros, username, slug });
+                    result = {
+                        success: false,
+                        message: `Unable to insert users with slug ${slug}, update values ${cap}`
+                    }
+                }
+            }
+        }
+
+    }
+    return result;
+}
 const dbProduct = async ({ query, sessionid, threadid, product, username, action }) => {
     let { slug, categorySlug, oldCategorySlug, name, description, image, imageSrc, sentiment, sentimentScore, itemUrl, manufUrl, brandSlug, micros, page, size } = product;
     name = ds(name);
@@ -331,7 +423,7 @@ const dbProduct = async ({ query, sessionid, threadid, product, username, action
             }
             break;
         }
-        default: //update,insert
+        default: {//update,insert
             if (!slug) {
                 action = 'insert';
                 let slugVerified = false;
@@ -421,6 +513,7 @@ const dbProduct = async ({ query, sessionid, threadid, product, username, action
                     }
                 }
             }
+        }
     }
 
     //l("returning from db.js:", result)
@@ -504,7 +597,7 @@ const dbReview = async ({ query, sessionid, threadid, review, username, action }
             }
             break;
         }
-        case 'updatPublished': {
+        case 'updatePublished': {
             sql = `UPDATE reviews set published='${active}' where slug='${slug}'`;
             let res = await query(`UPDATE reviews set published=? where slug=?`, [slug]);
             await dbLog({ query, type: 'SQL', body: `{sql:${sql}, res:${res ? JSON.stringify(res, null, 4) : 'null'}}`, threadid, sessionid, username });
@@ -620,7 +713,7 @@ const dbReview = async ({ query, sessionid, threadid, review, username, action }
 
 
 const dbPublication = async ({ query, sessionid, threadid, publication, username, action }) => {
-    let { slug, name, description, image, imageSrc, cdn, url, active, handler, crawlerEntryUrl, lastCrawled, micros, publicationCategorySlug, findexarCategprySlug } = publication;
+    let { slug, name, description, image, imageSrc, cdn, url, active, handler, crawlerEntryUrl, lastCrawled, micros, publicationCategorySlug, findexarCategprySlug, sentimentWeight } = publication;
     name = ds(name);
     description = ds(description);
     image = ds(image);
@@ -632,6 +725,7 @@ const dbPublication = async ({ query, sessionid, threadid, publication, username
     lastCrawled = lastCrawled || 0;
     micros = micros || microtime();
     cdn = cdn || 0;
+    sentimentWeight = sentimentWeight || 1000
     let sql = '';
     let result = false;
     switch (action) {
@@ -779,7 +873,7 @@ const dbPublication = async ({ query, sessionid, threadid, publication, username
         }
         case 'updateActive': {
             sql = `UPDATE publications set active='${active}' where slug='${slug}'`;
-            let res = await query(`UPDATE publications set active=? where slug=?`, [slug]);
+            let res = await query(`UPDATE publications set active=? where slug=?`, [CTIVE, slug]);
             await dbLog({ query, type: 'SQL', body: `{sql:${sql}, res:${res ? JSON.stringify(res, null, 4) : 'null'}}`, threadid, sessionid, username });
             if (res) {
                 result = {
@@ -791,6 +885,24 @@ const dbPublication = async ({ query, sessionid, threadid, publication, username
                 result = {
                     success: false,
                     message: `Unable to update the publication's active for ${slug}`
+                }
+            }
+            break;
+        }
+        case 'updateSentimentWeight': {
+            sql = `UPDATE publications set sentimentWeight='${sentimentWeight}' where slug='${slug}'`;
+            let res = await query(`UPDATE publications set sentimentWeight=? where slug=?`, [sentimentWeight, slug]);
+            await dbLog({ query, type: 'SQL', body: `{sql:${sql}, res:${res ? JSON.stringify(res, null, 4) : 'null'}}`, threadid, sessionid, username });
+            if (res) {
+                result = {
+                    success: true,
+                    slug
+                }
+            }
+            else {
+                result = {
+                    success: false,
+                    message: `Unable to update the publication's sentimentWeight for ${slug}`
                 }
             }
             break;
@@ -831,8 +943,8 @@ const dbPublication = async ({ query, sessionid, threadid, publication, username
                 await dbLog({ query, type: 'SQL', body: `{sql:${sql}, res:${rows ? JSON.stringify(rows, null, 4) : 'null'}}`, threadid, sessionid, username });
                 if (res) {
                     if (res.micros < micros) {
-                        sql = `UPDATE publications set name='${name}', description='${description}',image='${image}',imageSrc='${imageSrc}',cdn='${cdn}',url='${url}',active='${active}', handler='${handler}',crawlerEntryUrl='${crawlerEntryUrl}', micros=${micros},updatedBy=${username}, updated=now() where slug='${slug}`;
-                        res = await query(`UPDATE  products set name=?,description=?,image=?,imageSrc=?,cdn=?,url=?,active=?,handler=?,crawlerEntryUrl=?,micros=?,updatedBy=?,updated=now()  where slug=?`, [name, description, image, imageSrc, cdn, url, active, handler, crawlerEntryUrl, micros, username, slug]);
+                        sql = `UPDATE publications set name='${name}', description='${description}',image='${image}',imageSrc='${imageSrc}',cdn='${cdn}',url='${url}',active='${active}', handler='${handler}',crawlerEntryUrl='${crawlerEntryUrl}', micros=${micros},updatedBy=${username}, sentimentWeight=${sentimentWeight},updated=now() where slug='${slug}`;
+                        res = await query(`UPDATE  products set name=?,description=?,image=?,imageSrc=?,cdn=?,url=?,active=?,handler=?,crawlerEntryUrl=?,micros=?,updatedBy=?,sentimentWeight=?,updated=now()  where slug=?`, [name, description, image, imageSrc, cdn, url, active, handler, crawlerEntryUrl, micros, username, sentimentWeight, slug]);
                         await dbLog({ query, type: 'SQL', body: `{sql:${sql}, res:${res ? JSON.stringify(res, null, 4) : 'null'}}`, threadid, sessionid, username });
                         if (res && res.affectedRows) {
                             result = {
@@ -860,10 +972,10 @@ const dbPublication = async ({ query, sessionid, threadid, publication, username
                 else action = 'insert';
             }
             if (action == 'insert') {
-                sql = `INSERT into publications (name,description,imageSrc,image,cdn,url,active,handler,crawlerEntryUrl,micros,slug,createdBy) VALUES ('${name}','${description}','${imageSrc}','${image}','${cdn}','${url}','${active}','${handler}','${crawlerEntryUrl}',${micros},'${slug}','${username}')`
+                sql = `INSERT into publications (name,description,imageSrc,image,cdn,url,active,handler,crawlerEntryUrl,micros,slug,sentimentWeight,createdBy) VALUES ('${name}','${description}','${imageSrc}','${image}','${cdn}','${url}','${active}','${handler}','${crawlerEntryUrl}',${micros},'${slug}',${sentimentWeight},${username}')`
                 let res = false;
                 try {
-                    res = await query(`INSERT into publications (name,description,imageSrc,image,cdn,url,active,handler,crawlerEntryUrl,micros,slug,createdBy) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`, [name, description, imageSrc, image, cdn, url, active, handler, crawlerEntryUrl, micros, slug, username]);
+                    res = await query(`INSERT into publications (name,description,imageSrc,image,cdn,url,active,handler,crawlerEntryUrl,micros,slug,sentimentWeight,createdBy) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`, [name, description, imageSrc, image, cdn, url, active, handler, crawlerEntryUrl, micros, slug, sentimentWeight, username]);
                 }
                 catch (x) {
                     l("HANDLED DB EXCEPTION:", x)
@@ -877,7 +989,7 @@ const dbPublication = async ({ query, sessionid, threadid, publication, username
                     }
                 }
                 else {
-                    let cap = JSON.stringify({ name, cdn, active, handler, crawlerEntryUrl, description, imageSrc, image, url, micros, username, slug });
+                    let cap = JSON.stringify({ name, cdn, active, handler, crawlerEntryUrl, description, imageSrc, image, url, micros, username, slug, sentimentWeight });
                     result = {
                         success: false,
                         message: `Unable to insert publication with slug ${slug}, update values ${cap}`
@@ -1043,4 +1155,4 @@ const dbBrand = async ({ query, sessionid, threadid, brand, username, action }) 
     return result;
 }
 
-module.exports = { dbCategory, dbProduct, dbBrand, dbPublication, dbReview, dbLog, dbStart, dbEnd };
+module.exports = { dbCategory, dbProduct, dbBrand, dbPublication, dbReview, dbUserAuth, dbLog, dbStart, dbEnd };

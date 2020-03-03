@@ -1,6 +1,8 @@
 const { ApolloServer, gql } = require('apollo-server-express');
-const { dbStart, dbEnd, dbCategory } = require('./db');
+const { dbStart, dbEnd, dbCategory, dbPublication, dbProduct, dbBrand } = require('./db');
 const { l, chalk, microtime } = require('./common');
+
+const { testRedis, search, addProduct, addReview } = require('./resolvers');
 
 
 // A schema is a collection of type definitions (hence "typeDefs")
@@ -20,8 +22,8 @@ const typeDefs = gql`
     # case, the "books" query returns an array of zero or more Books (defined above).
    
     type Sentiment{
-        level:Float
-        percentile:Float
+        index:Int
+        rating:String
     }
     type Product {
         slug:ID
@@ -30,26 +32,38 @@ const typeDefs = gql`
         imageSrc:String
         image:String
         sentiment:Sentiment
+        sentimentScore:Int
         itemUrl:String
-        createdTime:String
+        manufUrl:String
+        created:String
+        updated:String
+        createdBy:String
+        updatedBy:String
         micros:Int
         category:Category
         brand:Brand
         reviews:[Review]
     }
-   
+    type Stars {
+        value:Float
+        total:Float
+    }
     type Review {
         slug:ID
         product:Product!
         title:String
         description:String
         sentiment:Sentiment
+        sentimentScore:Int
         url:String
         author:String
-        createdTime:String
+        created:String
+        updated:String
+        createdBy:String
+        updatedBy:String
         micros:Int
         published:Boolean
-        publication:[Publication]!
+        publication:Publication!
     }
     
     type Publication{
@@ -58,39 +72,36 @@ const typeDefs = gql`
         name:String
         imageSrc:String
         image:String
-        sentimentWeight:Float
+        sentimentWeight:Int
 
     }
-    type MetatagPath{
-        components:[String]
-    }
+    
     type Category{
         slug:ID
-        path:MetatagPath
+        parent:Category
         name:String
         description:String
-        url:String
-        imageSrc:String
-        image:String
-        createdTime:String
+        created:String
+        updated:String
+        createdBy:String
+        updatedBy:String
         micros:Int
         products:[Product]
     }
     type Brand{
         slug:ID
-        path:MetatagPath
         name:String
         description:String
         imageSrc:String
         image:String
-        createdTime:String
+        created:String
         micros:Int
-        products:[Product]
         url:String
     }
 
     ### Queries
     type Query {
+        unmappedCategories(page:Int,size:Int):[Category]
         categories(slug:String, query:String):[Category]
         products(slug:String,query:String):[Product]
         reviews(slug:String, query:String ):[Review],
@@ -129,21 +140,53 @@ const typeDefs = gql`
     }
     input ReviewInput{
         slug:ID
-        itemSlug:ID
+        productSlug:ID
+        publicationCategorySlug:ID
+        categorySlug:ID
         title:String
         description:String
-        sentimentLevel:Float
+        rawSentimentScore:Int
+        sentimentScore:Int
         url:String
         author:String
+        avatar:String
+        avatarSrc:String
+        stars:Stars
+        verified:Boolean
+        location:String
         published:Boolean
         publicationSlug:ID
         micros:Int
     }
+
+    input RawReviewInput{
+        productName:String
+        productDescription:String
+        brandName:String
+        brandDescription:String
+        publicationName:String
+        title:String
+        description:String
+        rawSentimentScore:Int
+        url:String
+        author:String
+        avatar:String
+        avatarSrc:String
+        stars:Stars
+        verified:Boolean
+        location:String
+        micros:Int
+    }
     type Mutation {
+        submitReview(review:RawReviewInput):Review
         addCategory(category:CategoryInput):Category
         brand(brand:BrandInput):Brand
         product(product:ProductInput):Product
         review(review:ReviewInput):Review
+        test(query:String):String
+        search(query:String):Product
+        addProduct(product:ProductInput):Product
+        addReview(review:RawReviewInput):Review
     }
   `;
 /**
@@ -162,6 +205,9 @@ const categoryMutation = (parent, args, context, info) => {
 
 
 }
+const submitReview = (parent, args, context, info) => {
+
+}
 const brandMutation = (parent, args, context, info) => {
 
 }
@@ -170,6 +216,32 @@ const productMutation = (parent, args, context, info) => {
 }
 const reviewMutation = (parent, args, context, info) => {
 
+}
+const testMutation = async (parent, args, context, info) => {
+    l(chalk.green("testMutation START"))
+    const ret = await search(args.query);
+    l(chalk.green("testMutation END", ret))
+    return `${ret}`;
+}
+const searchMutation = async (parent, args, context, info) => {
+    l(chalk.green("searchMutation START"))
+    const ret = await search({ query: args.query });
+    l(chalk.green("searchMutation END", ret))
+    return `${ret}`;
+}
+const addProductMutation = async (parent, args, context, info) => {
+    l(chalk.green("addProductMutation START"))
+    const ret = await addProduct({ product: args.product });
+    l(chalk.green("addProductMutation END", ret))
+    return `${ret}`;
+}
+const addReviewMutation = async (parent, args, context, info) => {
+    l(chalk.green("addReviewMutation START"))
+    const { user, sqlClient, sessionid, threadid } = context;
+
+    const ret = await addReview({ review: args.review, query: sqlClient.query, sessionid, threadid, username: user ? user.nickname : '' });
+    l(chalk.green("addReviewMutation END", ret))
+    return `${ret}`;
 }
 
 const books = [
@@ -205,6 +277,8 @@ const resolvers = {
         books: (parent, args, context, info) => { console.log("QUERY books"); return books }
     },
     Mutation: {
+        test: testMutation,
+        submitReview,
         addCategory: categoryMutation,
         product: (parent, args, context, info) => {
 

@@ -15,7 +15,9 @@ const {
     storeBrand,
     storePublication,
     storeReview,
-    fetchReviews
+    fetchReviews,
+    storeUser,
+    fetchUser
 
 } = require('./db.helper')
 
@@ -162,6 +164,34 @@ test('testing products', async () => {
     let leftSide = {};
     let rightSide = {};
     const sqlClient = await initTest();
+    const testUser = {
+        slug: 'tester-fester',
+        role: 'ops'
+    };
+
+    const testUserResult1 = await storeUser({ sqlClient, ...testUser })
+    leftSide.testUserResult1 = {
+        success: true,
+        slug: 'tester-fester',
+    }
+    rightSide.testUserResult1 = testUserResult1;
+    const fetchUser2Result = await fetchUser({ sqlClient, slug: 'tester-fester' });
+    leftSide.fetchUser2Result = {
+        success: true,
+        user: {
+            slug: "tester-fester",
+            role: "ops",
+            createdBy: 'tester'
+        },
+    }
+    delete fetchUser2Result.user.micros;
+    delete fetchUser2Result.user.updated;
+    delete fetchUser2Result.user.updatedBy;
+    delete fetchUser2Result.user.created;
+    rightSide.fetchUser2Result = fetchUser2Result;
+
+
+
     const testBrand = {
         name: 'Test Brand',
         description: 'A Brand for Testing',

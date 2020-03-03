@@ -13,7 +13,7 @@ const uid = require('uid-safe');
 const authRoutes = require("./auth-routes");
 //const thoughtsAPI = require("./api/api");
 const apollo = require('./api/apollo');
-
+const { l, chalk, allowLog } = require('./api/common');
 
 
 const dev = process.env.NODE_ENV !== "production";
@@ -24,6 +24,7 @@ const app = next({
 const handle = app.getRequestHandler();
 
 app.prepare().then(() => {
+    allowLog();
     const server = express();
 
     // 2 - add session management to Express

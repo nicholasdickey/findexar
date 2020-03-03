@@ -1,4 +1,4 @@
-const { dbStart, dbEnd, dbCategory, dbProduct, dbBrand, dbPublication, dbReview } = require('../../src/api/db');
+const { dbStart, dbEnd, dbCategory, dbProduct, dbBrand, dbPublication, dbReview, dbUserAuth } = require('../../src/api/db');
 const sessionid = 'test-session';
 const threadid = Math.floor(Math.random() * 10000);;
 const initTest = async () => {
@@ -18,6 +18,27 @@ const initTest = async () => {
 const endTest = async (sqlClient) => {
     await dbEnd({ connection: sqlClient.connection });
     return
+}
+const storeUser = async ({ sqlClient, slug, role }) => {
+    const { query } = sqlClient;
+    const user = {
+        slug,
+        role
+    }
+    const username = "tester";
+    const action = 'update';
+
+    return await dbUserAuth({ query, sessionid, threadid, user, username, action });
+}
+const fetchUser = async ({ sqlClient, slug }) => {
+    const { query } = sqlClient;
+    const user = {
+        slug
+    }
+    const username = "tester";
+    const action = 'fetch';
+
+    return await dbUserAuth({ query, sessionid, threadid, user, username, action });
 }
 //slug, name, description, image, imageSrc, url, cdn, micros
 const storeBrand = async ({ sqlClient, slug, image, imageSrc, url, cdn, name, description }) => {
@@ -199,5 +220,6 @@ const fetchProductsByCategory = async ({ sqlClient, categorySlug }) => {
 module.exports = {
     initTest, endTest, storeCategory, fetchCategoryChildren, removeCategory, fetchCategory, storeProduct,
     replaceProductCategory, updateProductSentiment, fetchProduct, fetchProductsByCategory
-    , storeBrand, storePublication, storeReview, fetchReviews
+    , storeBrand, storePublication, storeReview, fetchReviews,
+    storeUser, fetchUser
 }
