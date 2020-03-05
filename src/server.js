@@ -12,7 +12,7 @@ const Auth0Strategy = require("passport-auth0");
 const uid = require('uid-safe');
 const authRoutes = require("./auth-routes");
 //const thoughtsAPI = require("./api/api");
-const apollo = require('./api/apollo');
+const { apollo } = require('./api/apollo');
 const { l, chalk, allowLog } = require('./api/common');
 
 

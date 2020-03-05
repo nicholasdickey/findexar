@@ -104,8 +104,14 @@ test('testing categories', async () => {
             description: "A Category 2 for Testing",
             name: "Test Category Two - Updated",
             parentSlug: "parent-test-category",
+            path: "[\"parent-test-category\"]",
             slug: "test-category2",
-            updatedBy: "tester"
+            updatedBy: "tester",
+            approved: 0,
+            approvedBy: null,
+            approvedOn: null,
+            matched: 0
+
         },
     }
     delete fetch2Result.category.micros;
@@ -123,7 +129,11 @@ test('testing categories', async () => {
                 description: "A Category 1 for Testing",
                 name: "Test Category One",
                 parentSlug: "parent-test-category",
-                slug: "test-category1"
+                slug: "test-category1",
+                approved: 0,
+                approvedBy: null,
+                approvedOn: null,
+                matched: 0
             },
             {
                 createdBy: "tester",
@@ -131,7 +141,11 @@ test('testing categories', async () => {
                 name: "Test Category Two - Updated",
                 parentSlug: "parent-test-category",
                 slug: "test-category2",
-                updatedBy: "tester"
+                updatedBy: "tester",
+                approved: 0,
+                approvedBy: null,
+                approvedOn: null,
+                matched: 0
             }
         ]
     }
@@ -154,7 +168,7 @@ test('testing categories', async () => {
 })
 
 test('testing products', async () => {
-    allowLog();
+    // allowLog();
 
     //console.log = jest.fn()
     //expect(console.log).toHaveBeenCalled();
@@ -181,7 +195,7 @@ test('testing products', async () => {
         user: {
             slug: "tester-fester",
             role: "ops",
-            createdBy: 'tester'
+            createdBy: 'tester',
         },
     }
     delete fetchUser2Result.user.micros;
@@ -231,11 +245,11 @@ test('testing products', async () => {
             index: "4567",
             ranking: "34/56"
         },
-        sentimentScore: 4567,
+        findex: 4567,
         image: "test image",
         imageSrc: "test image source",
-        itemUrl: "test item url",
-        manufUrl: "test manuf url",
+        productUrl: "test item url",
+        vendorUrls: [{ amazon: 'test-amazon' }],
         categorySlug: 'test-category1',
         brandSlug: 'test-brand'
 
@@ -255,11 +269,11 @@ test('testing products', async () => {
             index: "3456",
             ranking: "23/45"
         },
-        sentimentScore: 3456,
+        findex: 3456,
         image: "test image 2",
         imageSrc: "test image source 2",
-        itemUrl: "test item url 2",
-        manufUrl: "test manuf url 2",
+        productUrl: "test item url 2",
+        vendorUrls: [{ amazon: 'test-amazon' }],
         categorySlug: 'test-category1',
         brandSlug: 'test-brand'
     }
@@ -298,14 +312,19 @@ test('testing products', async () => {
                 description: "A product for testing one",
                 image: "test image",
                 imageSrc: "test image source",
-                itemUrl: "test item url",
-                manufUrl: "test manuf url",
+                productUrl: "test item url",
+                vendorUrls: "[{\"amazon\":\"test-amazon\"}]",
                 name: "Test Product 1",
                 sentiment: "{\"index\":\"4567\",\"ranking\":\"34/56\"}",
-                sentimentScore: 4567,
+                findex: 4567,
                 slug: "test-product-1",
                 cdn: 0,
-                brandSlug: 'test-brand'
+                brandSlug: 'test-brand',
+                approved: 0,
+                approvedBy: null,
+                approvedOn: null,
+                matched: 0,
+                fakespot: null
             },
             {
                 categorySlug: "test-category2",
@@ -313,14 +332,19 @@ test('testing products', async () => {
                 description: "A product for testing two",
                 image: "test image 2",
                 imageSrc: "test image source 2",
-                itemUrl: "test item url 2",
-                manufUrl: "test manuf url 2",
+                productUrl: "test item url 2",
+                vendorUrls: "[{\"amazon\":\"test-amazon\"}]",
                 name: "Test Product 2",
                 sentiment: "{\"index\":\"3456\",\"ranking\":\"23/45\"}",
-                sentimentScore: 3456,
+                findex: 3456,
                 slug: "test-product-2",
                 cdn: 0,
-                brandSlug: 'test-brand'
+                brandSlug: 'test-brand',
+                approved: 0,
+                approvedBy: null,
+                approvedOn: null,
+                matched: 0,
+                fakespot: null
             }
         ]
     }
@@ -339,7 +363,7 @@ test('testing products', async () => {
         sqlClient, slug: 'test-product-1', sentiment: {
             index: "1111",
             ranking: "1/234"
-        }, sentimentScore: 1111
+        }, findex: 1111
     });
     leftSide.updateSentimentResult = {
         success: true,
@@ -359,12 +383,17 @@ test('testing products', async () => {
             updatedBy: "tester",
             image: "test image",
             imageSrc: "test image source",
-            itemUrl: "test item url",
-            manufUrl: "test manuf url",
+            productUrl: "test item url",
+            vendorUrls: "[{\"amazon\":\"test-amazon\"}]",
             sentiment: "{\"index\":\"1111\",\"ranking\":\"1/234\"}",
-            sentimentScore: 1111,
+            findex: 1111,
             cdn: 0,
-            brandSlug: 'test-brand'
+            brandSlug: 'test-brand',
+            approved: 0,
+            approvedBy: null,
+            approvedOn: null,
+            matched: 0,
+            fakespot: null
         },
     }
     delete fetch2Result.product.micros;
@@ -376,12 +405,8 @@ test('testing products', async () => {
     const testReview1 = {
         title: 'Test review 1',
         description: "A review for testing one",
-        sentiment: {
-            index: "4567",
-            ranking: "34/56"
-        },
+        stars: { value: 3.5, total: 5 },
         sentimentScore: 4567,
-
         url: "test review url",
         author: "test author",
         publicationSlug: 'test-publication',
@@ -407,13 +432,17 @@ test('testing products', async () => {
             productSlug: "test-product-1",
             slug: "test-review-1",
             createdBy: "tester",
-
+            avatar: "",
+            avatarSrc: "",
             url: "test review url",
             author: "test author",
-            sentiment: "{\"index\":\"4567\",\"ranking\":\"34/56\"}",
+            stars: "{\"value\":3.5,\"total\":5}",
             sentimentScore: 4567,
             publicationSlug: 'test-publication',
-            published: 1
+            published: 1,
+            fakespot: "{}",
+            location: "",
+            verified: 0
         }],
     }
     delete fetchReviewsResult.reviews[0].micros;

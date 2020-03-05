@@ -8,11 +8,12 @@ redisearch(redis);
 const redisServer = process.env.REDIS_SERVER;
 const redisPort = process.env.REDIS_PORT;
 const redisName = process.env.REDIS_NAME;
+console.log(chalk.green("creating redisClient:", JSON.stringify({ redisPort, redisServer })))
 const redisClient = redis.createClient(redisPort, redisServer)
 redisClient.on("error", function (error) {
     console.error(error);
 });
-
+l(chalk.green("created redisClient:", { redisPort, redisServer }))
 //redis = new Redis(redisPort, redisServer, { connectionName: redisName });
 //pubsub = new Redis(redisPort, redisServer, { connectionName: `${redisName}Pubsub` });
 
@@ -46,14 +47,31 @@ const redisC = {
             });
         })
     },
-    ft_add: async ({ index, slug, title, description, brand, category }) => {
+    ft_drop: async ({ index }) => {
         return new Promise((resolve, reject) => {
-            return redisClient.ft_add(index, slug, 1, 'FIELDS', 'title', title, 'description', description, 'brand', brand, 'category', category, (err, res) => {
+            return redisClient.ft_drop(index, (err, res) => {
                 if (err) {
-
                     l(chalk.red.bold("REDIS ERROR:", err));
                 }
-                l(chalk.cyan(`REDIS: FT.ADD[${index},${slug},${title},${description}]=${res}`))
+                l(chalk.cyan(`REDIS: FT.DROP[${index}]=${res}`))
+                return resolve(res);
+            });
+        })
+    },
+    ft_add: async ({ index, slug, fields }) => {
+        let fieldsArray = [];
+        let keys = Object.keys(fields);
+        keys.forEach(key => {
+            fieldsArray.push(key);
+            fieldsArray.push(fields[key]);
+        })
+
+        return new Promise((resolve, reject) => {
+            return redisClient.ft_add(index, slug, 1, 'FIELDS', ...fieldsArray, (err, res) => {
+                if (err) {
+                    l(chalk.red.bold("REDIS ERROR:", err));
+                }
+                l(chalk.cyan(`REDIS: FT.ADD[${index},${slug},${JSON.stringify({ fields })},${JSON.stringify({ fieldsArray })}]=${res}`))
                 return resolve(res);
             });
         })
@@ -61,12 +79,14 @@ const redisC = {
     ft_search: async ({ index, query, page, size }) => {
         return new Promise((resolve, reject) => {
             let start = (page - 1) * size;
+            l(chalk.red.bold("REDIS SEARCH:", index, query, start, size));
+
             return redisClient.ft_search(index, query, 'LIMIT', start, size, (err, res) => {
                 if (err) {
 
                     l(chalk.red.bold("REDIS ERROR:", err));
                 }
-                l(chalk.cyan(`REDIS: FT.SEARCH[${index},${`"${query}"`},${page},${size}]=${res}`))
+                l(chalk.cyan(`REDIS: FT.SEARCH[${index}, ${`"${query}"`}, ${page}, ${size}]=${res}`))
                 return resolve(res);
             });
         })

@@ -1,10 +1,12 @@
+require("dotenv").config();
 const { dbStart, dbEnd, dbCategory, dbProduct, dbBrand, dbPublication, dbReview, dbUserAuth } = require('../../src/api/db');
 const sessionid = 'test-session';
 const threadid = Math.floor(Math.random() * 10000);;
-const initTest = async () => {
-    const sqlClient = await dbStart();
+const initTest = async (server) => {
+    const sqlClient = await dbStart(server);
     //console.log("initTest sqlClient:", sqlClient.query)
     const query = sqlClient.query;
+    await query(`DELETE from users where createdBy=?`, ['tester']);
     await query(`DELETE from categories where createdBy=?`, ['tester']);
     await query(`DELETE from products where createdBy=?`, ['tester']);
     await query(`DELETE from brands where createdBy=?`, ['tester']);
@@ -78,7 +80,7 @@ const storePublication = async ({ sqlClient, slug, image, imageSrc, url, cdn, na
     return await dbPublication({ query, sessionid, threadid, publication, username, action });
 }
 
-const storeReview = async ({ sqlClient, slug, image, imageSrc, url, cdn, title, description, published, publicationSlug, productSlug, sentiment, sentimentScore, author, active }) => {
+const storeReview = async ({ sqlClient, slug, image, imageSrc, url, cdn, title, description, published, publicationSlug, productSlug, stars, fakespot, verified, sentimentScore, author, active }) => {
     const { query } = sqlClient;
     const review = {
         slug,
@@ -88,7 +90,7 @@ const storeReview = async ({ sqlClient, slug, image, imageSrc, url, cdn, title, 
         active,
         cdn,
         title,
-        published, publicationSlug, productSlug, sentiment, sentimentScore, author,
+        published, publicationSlug, productSlug, stars, fakespot, verified, sentimentScore, author,
         description
     }
     const username = "tester";
@@ -151,7 +153,7 @@ const fetchCategory = async ({ sqlClient, slug }) => {
 
     return await dbCategory({ query, sessionid, threadid, category, username, action });
 }
-const storeProduct = async ({ sqlClient, slug, categorySlug, name, description, image, imageSrc, sentiment, sentimentScore, itemUrl, manufUrl, brandSlug }) => {
+const storeProduct = async ({ sqlClient, slug, categorySlug, name, description, image, imageSrc, sentiment, fakespot, findex, productUrl, vendorUrls, brandSlug }) => {
     const { query } = sqlClient;
     const product = {
         slug,
@@ -159,11 +161,12 @@ const storeProduct = async ({ sqlClient, slug, categorySlug, name, description, 
         name,
         description,
         sentiment,
-        sentimentScore,
+        fakespot,
+        findex,
         image,
         imageSrc,
-        itemUrl,
-        manufUrl,
+        productUrl,
+        vendorUrls,
         brandSlug
     }
     const username = "tester";
@@ -183,12 +186,12 @@ const replaceProductCategory = async ({ sqlClient, slug, categorySlug, oldCatego
 
     return await dbProduct({ query, sessionid, threadid, product, username, action });
 }
-const updateProductSentiment = async ({ sqlClient, slug, sentiment, sentimentScore }) => {
+const updateProductSentiment = async ({ sqlClient, slug, sentiment, findex }) => {
     const { query } = sqlClient;
     const product = {
         slug,
         sentiment,
-        sentimentScore
+        findex
     }
     const username = "tester";
     const action = 'updateSentiment';

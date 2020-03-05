@@ -15,13 +15,17 @@ const dbDatabase = process.env.DB_DATABASE;
     database: dbDatabase
 });*/
 //const query = util.promisify(connection.query).bind(connection);
-const dbStart = async () => {
-    var connection = mysql.createConnection({
-        host: dbServer,
-        user: dbUser,
-        password: dbPassword,
-        database: dbDatabase
-    });
+const dbStart = async (server) => {
+    if (!server)
+        server = {
+            host: dbServer,
+            user: dbUser,
+            password: dbPassword,
+            database: dbDatabase
+        }
+    l("dbStart", server);
+
+    var connection = mysql.createConnection(server);
     const query = util.promisify(connection.query).bind(connection);
     await connection.connect();
     return { connection, query };
@@ -41,13 +45,13 @@ const dbLog = async ({ query, type, body, threadid, sessionid, username }) => {
         sql = `INSERT into dblog (type,threadid,body,micros,sessionid,username) VALUES (?,?,?,?,?,?)`;
         await query(sql, [type, threadid, body, microtime(), sessionid, username])
         l(chalk.red("DBLOG:", type, body))
-
     }
 }
 const dbCategory = async ({ query, sessionid, threadid, category, username, action }) => {
     let { slug, parentSlug, name, description, micros, page, size } = category;
     name = ds(name);
     description = ds(description);
+    parentSlug = ds(parentSlug);
     micros = micros || microtime();
     page = page || 0;
     size = size || 25;
@@ -58,7 +62,7 @@ const dbCategory = async ({ query, sessionid, threadid, category, username, acti
     switch (action) {
         case 'remove':
             //Check if has children
-            sql = `SELECT slug from categories where parentSLug='${slug}'`;
+            sql = `SELECT slug from categories where parentSlug='${slug}'`;
             rows = await query(`SELECT slug from categories where parentSlug=?`, [slug]);
             await dbLog({ query, type: 'SQL', body: `{sql:${sql}, res:${rows ? JSON.stringify(rows, null, 4) : 'null'}}`, threadid, sessionid, username });
             if (rows && rows.length)
@@ -68,7 +72,7 @@ const dbCategory = async ({ query, sessionid, threadid, category, username, acti
                 }
             else {
                 sql = `DELETE from categories where slug='${slug}'`;
-                let res = await query(`DELETE from categories where slug=?`, [slug]);
+                res = await query(`DELETE from categories where slug=?`, [slug]);
                 await dbLog({ query, type: 'SQL', body: `{sql:${sql}, res:${res ? JSON.stringify(res, null, 4) : 'null'}}`, threadid, sessionid, username });
                 if (res) {
                     result = {
@@ -89,9 +93,24 @@ const dbCategory = async ({ query, sessionid, threadid, category, username, acti
             let rows = await query(`SELECT * from categories where slug=?`, [slug]);
             await dbLog({ query, type: 'SQL', body: `{sql:${sql}, res:${rows ? JSON.stringify(rows, null, 4) : 'null'}}`, threadid, sessionid, username });
             if (rows && rows.length) {
+                /*
+                parse parentSlug, and create path of names
+                */
+                let category = rows[0];
+                let parentSlug = category['parentSlug'];
+                let path = [];
+                if (parentSlug == 'native') {
+                    path.push(parentSlug);
+                }
+                else {
+                    let parts = parentSlug.split(':');
+                    path.push(...parts);
+                }
+                category['path'] = JSON.stringify(path);
+
                 result = {
                     success: true,
-                    category: rows[0]
+                    category: category
                 }
             }
             else {
@@ -133,7 +152,7 @@ const dbCategory = async ({ query, sessionid, threadid, category, username, acti
                 while (!slugVerified) {
                     slug = slugify(t, { lower: true });
                     sql = `SELECT * from categories where slug='${slug}'`;
-                    let res = await query(`SELECT * from categories where slug=?`, [slug]);
+                    res = await query(`SELECT * from categories where slug=?`, [slug]);
                     await dbLog({ query, type: 'slugify', body: JSON.stringify({ slug, sql, res }), threadid, sessionid, username });
 
                     if (!result) {
@@ -150,7 +169,7 @@ const dbCategory = async ({ query, sessionid, threadid, category, username, acti
             if (action != 'insert') {
                 sql = `SELECT * from categories where slug='${slug}'`;
                 let rows = await query(`SELECT * from categories where slug=?`, [slug]);
-                let res = false;
+                res = false;
                 if (rows)
                     res = rows[0];
                 await dbLog({ query, type: 'SQL', body: `{sql:${sql}, res:${rows ? JSON.stringify(rows, null, 4) : 'null'}}`, threadid, sessionid, username });
@@ -185,15 +204,30 @@ const dbCategory = async ({ query, sessionid, threadid, category, username, acti
             }
             if (action == 'insert') {
                 sql = `INSERT into categories (name,description,micros,slug,parentSlug,createdBy) VALUES ('${name}','${description}',${micros},'${slug}','${parentSlug}','${username}')`
-                let res = false;
+                res = false;
                 try {
                     res = await query(`INSERT into categories (name,description,micros,slug,parentSlug,createdBy) VALUES (?,?,?,?,?,?)`, [name, description, micros, slug, parentSlug, username]);
                 }
                 catch (x) {
-                    l("HANDLED DB EXCEPTION:", x)
+                    l("HANDLED DB EXCEPTION:", sql, x)
                 }
                 await dbLog({ query, type: 'SQL', body: `{sql:${sql}, res:${res ? JSON.stringify(res, null, 4) : 'null'}}`, threadid, sessionid, username });
                 if (res && res.affectedRows) {
+                    if (parentSlug == 'native') {
+                        let parts = slug.split(':');
+                        let publicationSlug = parts[1];
+                        let publicationCategorySlug = publicationSlug[2];
+                        sql = `INSERT into publicationCategories (publicationCategorySlug,publicationSlug,findexarCategorySlug,micros,createdBy) VALUES ('${publicationCategorySlug}','${publicationSlug}','${slug}',${micros},'${username}')`
+                        res = false;
+                        try {
+                            res = await query(`INSERT into publicationCategories (publicationCategorySlug,publicationSlug,findexarCategorySlug,micros,createdBy) VALUES (?,?,?,?,?)`, [publicationCategorySlug, publicationSlug, slug, micros, username]);
+                        }
+                        catch (x) {
+                            l("HANDLED DB EXCEPTION:", sql, x)
+                        }
+                        await dbLog({ query, type: 'SQL', body: `{sql:${sql}, res:${res ? JSON.stringify(res, null, 4) : 'null'}}`, threadid, sessionid, username });
+
+                    }
                     result = {
                         success: true,
                         slug
@@ -305,7 +339,7 @@ const dbUserAuth = async ({ query, sessionid, threadid, user, username, action }
     return result;
 }
 const dbProduct = async ({ query, sessionid, threadid, product, username, action }) => {
-    let { slug, categorySlug, oldCategorySlug, name, description, image, imageSrc, sentiment, sentimentScore, itemUrl, manufUrl, brandSlug, micros, page, size } = product;
+    let { slug, categorySlug, oldCategorySlug, name, description, image, imageSrc, sentiment, findex, fakespot, productUrl, vendorUrls, brandSlug, micros, page, size } = product;
     name = ds(name);
     categorySlug = ds(categorySlug) || 'unknown';
     brandSlug = ds(brandSlug) || 'unknown';
@@ -313,9 +347,11 @@ const dbProduct = async ({ query, sessionid, threadid, product, username, action
     image = ds(image);
     imageSrc = ds(imageSrc);
     sentiment = JSON.stringify(sentiment || {});
-    sentimentScore = sentimentScore || 0;
-    itemUrl = ds(itemUrl);
-    manufUrl = ds(manufUrl);
+    fakesport = JSON.stringify(fakespot || {});
+    vendorUrls = JSON.stringify(vendorUrls || {});
+    findex = findex || 0;
+    productUrl = ds(productUrl);
+
     micros = micros || microtime();
     page = page || 0;
     size = size || 25;
@@ -326,7 +362,7 @@ const dbProduct = async ({ query, sessionid, threadid, product, username, action
     switch (action) {
         /*  case 'remove':
               //Check if has children
-              sql = `SELECT slug from categories where parentSLug='${slug}'`;
+              sql = `SELECT slug from categories where parentSlug='${slug}'`;
               rows = await query(`SELECT slug from categories where parentSlug=?`, [slug]);
               await dbLog({ query, type: 'SQL', body: `{sql:${sql}, res:${rows ? JSON.stringify(rows, null, 4) : 'null'}}`, threadid, sessionid, username });
               if (rows && rows.length)
@@ -370,8 +406,8 @@ const dbProduct = async ({ query, sessionid, threadid, product, username, action
             break;
         }
         case 'fetchByCategory': {
-            sql = `SELECT * from products where categorySlug='${categorySlug}' order by sentimentScore desc  limit ${start},${size}`;
-            let rows = await query(`SELECT * from products where categorySlug=? order by sentimentScore desc  limit ${start},${size}`, [categorySlug]);
+            sql = `SELECT * from products where categorySlug='${categorySlug}' order by findex desc  limit ${start},${size}`;
+            let rows = await query(`SELECT * from products where categorySlug=? order by findex desc  limit ${start},${size}`, [categorySlug]);
             await dbLog({ query, type: 'SQL', body: `{sql:${sql}, res:${rows ? JSON.stringify(rows, null, 4) : 'null'}}`, threadid, sessionid, username });
             if (rows && rows.length) {
                 result = {
@@ -406,8 +442,8 @@ const dbProduct = async ({ query, sessionid, threadid, product, username, action
             break;
         }
         case 'updateSentiment': {
-            sql = `UPDATE products set sentiment='${sentiment}',sentimentScore='${sentimentScore}',updated=now(),updatedBy='${username}' where slug='${slug}'`;
-            let res = await query(`UPDATE products set sentiment=?,sentimentScore=?,updated=now(),updatedBy=? where slug=?`, [sentiment, sentimentScore, username, slug]);
+            sql = `UPDATE products set sentiment='${sentiment}',findex='${findex}',updated=now(),updatedBy='${username}' where slug='${slug}'`;
+            let res = await query(`UPDATE products set sentiment=?,findex=?,updated=now(),updatedBy=? where slug=?`, [sentiment, findex, username, slug]);
             await dbLog({ query, type: 'SQL', body: `{sql:${sql}, res:${res ? JSON.stringify(res, null, 4) : 'null'}}`, threadid, sessionid, username });
             if (res) {
                 result = {
@@ -459,8 +495,8 @@ const dbProduct = async ({ query, sessionid, threadid, product, username, action
                 await dbLog({ query, type: 'SQL', body: `{sql:${sql}, res:${rows ? JSON.stringify(rows, null, 4) : 'null'}}`, threadid, sessionid, username });
                 if (res) {
                     if (res.micros < micros) {
-                        sql = `UPDATE products set name='${name}', description='${description}',categorySlug='${categorySlug},brandSlug='${brandSlug}',image='${image}',imageSrc='${imageSrc}',sentiment='${sentiment}', sentimentScore='${sentimentScore}',itemUrl='${itemUrl}',manufUrl='${manufUrl}', micros=${micros},updatedBy=${username}, updated=now() where slug='${slug}`;
-                        res = await query(`UPDATE  products set name=?,description=?,categorySlug=?,brandSlug=?,image=?,imageSrc=?,sentiment=?,sentimentScore=?,itemUrl=?,manufUrl=?,micros=?,updatedBy=?,updated=now()  where slug=?`, [name, description, categorySlug, brandSlug, image, imageSrc, sentiment, sentimentScore, itemUrl, manufUrl, micros, username, slug]);
+                        sql = `UPDATE products set name='${name}', description='${description}',categorySlug='${categorySlug},brandSlug='${brandSlug}',image='${image}',imageSrc='${imageSrc}',sentiment='${sentiment}',fakespot='${fakespot}' findex='${findex}',productUrl='${productUrl}',vendorUrls='${vendorUrls}', micros=${micros},updatedBy=${username}, updated=now() where slug='${slug}`;
+                        res = await query(`UPDATE  products set name=?,description=?,categorySlug=?,brandSlug=?,image=?,imageSrc=?,sentiment=?,fakespot=?,findex=?,productUrl=?,vendorUrls=?,micros=?,updatedBy=?,updated=now()  where slug=?`, [name, description, categorySlug, brandSlug, image, imageSrc, sentiment, fakespot, findex, productUrl, vendorUrls, micros, username, slug]);
                         await dbLog({ query, type: 'SQL', body: `{sql:${sql}, res:${res ? JSON.stringify(res, null, 4) : 'null'}}`, threadid, sessionid, username });
                         if (res && res.affectedRows) {
                             result = {
@@ -490,10 +526,10 @@ const dbProduct = async ({ query, sessionid, threadid, product, username, action
                 else action = 'insert';
             }
             if (action == 'insert') {
-                sql = `INSERT into products (name,description,imageSrc,image,sentiment,sentimentScore,itemUrl,manufUrl,micros,slug,categorySlug,brandSlug,createdBy) VALUES ('${name}','${description}','${imageSrc}','${image}','${sentiment}','${sentimentScore}','${itemUrl}','${manufUrl}',${micros},'${slug}','${categorySlug}','${brandSlug}','${username}')`
+                sql = `INSERT into products (name,description,imageSrc,image,sentiment,fakespot,findex,productUrl,vendorUrls,micros,slug,categorySlug,brandSlug,createdBy) VALUES ('${name}','${description}','${imageSrc}','${image}','${sentiment}','${fakespot}','${findex}','${productUrl}','${vendorUrls}',${micros},'${slug}','${categorySlug}','${brandSlug}','${username}')`
                 let res = false;
                 try {
-                    res = await query(`INSERT into products (name,description,imageSrc,image,sentiment,sentimentScore,itemUrl,manufUrl,micros,slug,categorySlug,brandSlug,createdBy) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`, [name, description, imageSrc, image, sentiment, sentimentScore, itemUrl, manufUrl, micros, slug, categorySlug, brandSlug, username]);
+                    res = await query(`INSERT into products (name,description,imageSrc,image,sentiment,fakespot,findex,productUrl,vendorUrls,micros,slug,categorySlug,brandSlug,createdBy) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, [name, description, imageSrc, image, sentiment, fakespot, findex, productUrl, vendorUrls, micros, slug, categorySlug, brandSlug, username]);
                 }
                 catch (x) {
                     l("HANDLED DB EXCEPTION:", x)
@@ -506,7 +542,7 @@ const dbProduct = async ({ query, sessionid, threadid, product, username, action
                     }
                 }
                 else {
-                    let cap = JSON.stringify({ name, categorySlug, description, imageSrc, image, sentiment, itemUrl, manufUrl, micros, username, slug });
+                    let cap = JSON.stringify({ name, categorySlug, description, imageSrc, image, sentiment, productUrl, vendorUrls, micros, username, slug });
                     result = {
                         success: false,
                         message: `Unable to insert product with slug ${slug}, update values ${cap}`
@@ -521,18 +557,24 @@ const dbProduct = async ({ query, sessionid, threadid, product, username, action
 }
 
 const dbReview = async ({ query, sessionid, threadid, review, username, action }) => {
-    let { slug, productSlug, publicationSlug, title, description, sentiment, sentimentScore, url, author, published, micros, page, size } = review;
+    let { slug, productSlug, publicationSlug, title, description, stars, avatar, avatarSrc, sentimentScore, verified, fakespot, url, author, published, location, micros, page, size } = review;
     title = ds(title);
     productSlug = ds(productSlug) || 'unknown';
     publicationSlug = ds(publicationSlug) || 'unknown';
     description = ds(description);
+    avatar = ds(avatar);
+    avatarSrc = ds(avatarSrc);
     // image = ds(image);
     // imageSrc = ds(imageSrc);
-    sentiment = JSON.stringify(sentiment || {});
+    stars = JSON.stringify(stars || {});
+    fakespot = JSON.stringify(fakespot || {});
+
     sentimentScore = sentimentScore || 0;
     url = ds(url);
     author = ds(author);
+    location = ds(location);
     published = published || 0;
+    verified = verified || 0;
 
     micros = micros || microtime();
     page = page || 0;
@@ -550,7 +592,7 @@ const dbReview = async ({ query, sessionid, threadid, review, username, action }
             if (rows && rows.length) {
                 result = {
                     success: true,
-                    product: rows[0]
+                    review: rows[0]
                 }
             }
             else {
@@ -580,8 +622,8 @@ const dbReview = async ({ query, sessionid, threadid, review, username, action }
             break;
         }
         case 'updateSentiment': {
-            sql = `UPDATE reviews set sentiment='${sentiment}',sentimentScore='${sentimentScore}',updated=now(),updatedBy='${username}' where slug='${slug}'`;
-            let res = await query(`UPDATE reviews set sentiment=?,sentimentScore=?,updated=now(),updatedBy=? where slug=?`, [sentiment, sentimentScore, username, slug]);
+            sql = `UPDATE reviews set sentimentScore='${sentimentScore}',updated=now(),updatedBy='${username}' where slug='${slug}'`;
+            let res = await query(`UPDATE reviews set sentimentScore=?,updated=now(),updatedBy=? where slug=?`, [sentimentScore, username, slug]);
             await dbLog({ query, type: 'SQL', body: `{sql:${sql}, res:${res ? JSON.stringify(res, null, 4) : 'null'}}`, threadid, sessionid, username });
             if (res) {
                 result = {
@@ -592,7 +634,7 @@ const dbReview = async ({ query, sessionid, threadid, review, username, action }
             else {
                 result = {
                     success: false,
-                    message: `Unable to update the product sentiment ${sentiment} for ${slug}`
+                    message: `Unable to update the product sentiment ${sentimentScore} for ${slug}`
                 }
             }
             break;
@@ -652,8 +694,8 @@ const dbReview = async ({ query, sessionid, threadid, review, username, action }
                 //slug, productSlug, publicationSlug, title, description, sentiment, sentimentScore, image, imageSrc, url, author, published, micros
                 if (res) {
                     if (res.micros < micros) {
-                        sql = `UPDATE reviews set productSlug='${productSlug}',publicationSlug='${publicationSlug}',title='${title}', description='${description}',sentiment='${sentiment}', sentimentScore=${sentimentScore},url='${url}',author='${author}', published='${published}', micros=${micros},updatedBy=${username}, updated=now() where slug='${slug}`;
-                        res = await query(`UPDATE  reviews  set productSlug=?,publicationSlug=?,title=?,description=?,sentiment=?,sentimentScore,url=?,author=?,published=?,micros=?,updatedBy=?,updated=now()  where slug=?`, [productSlug, pblicationSlug, title, description, sentiment, sentimentScore, image, imageSrc, url, author, published, micros, username, slug]);
+                        sql = `UPDATE reviews set productSlug='${productSlug}',publicationSlug='${publicationSlug}',title='${title}', description='${description}',avarar='${avatar}',avatarSrc=${avatarSrc},stars='${stars}',fakespot='${fakespot}',verified='${verified}', sentimentScore=${sentimentScore},url='${url}',author='${author}', published='${published}',location='${location}', micros=${micros},updatedBy=${username}, updated=now() where slug='${slug}`;
+                        res = await query(`UPDATE  reviews  set productSlug=?,publicationSlug=?,title=?,description=?,avatar,avatarSrc,stars=?,fakespot=?,veified=?,sentimentScore,url=?,author=?,published=?,location=?,micros=?,updatedBy=?,updated=now()  where slug=?`, [productSlug, pblicationSlug, title, description, avatar, avatarSrc, stars, fakespot, verified, sentimentScore, image, imageSrc, url, author, published, location, micros, username, slug]);
                         await dbLog({ query, type: 'SQL', body: `{sql:${sql}, res:${res ? JSON.stringify(res, null, 4) : 'null'}}`, threadid, sessionid, username });
                         if (res && res.affectedRows) {
                             result = {
@@ -668,6 +710,9 @@ const dbReview = async ({ query, sessionid, threadid, review, username, action }
                                     description,
                                     micros,
                                     username,
+                                    avatar,
+                                    avatarSrc,
+                                    stars,
                                     slug
                                 }
                             )
@@ -681,10 +726,10 @@ const dbReview = async ({ query, sessionid, threadid, review, username, action }
                 else action = 'insert';
             }
             if (action == 'insert') {
-                sql = `INSERT into reviews (productSlug,publicationSlug,title,description,sentiment,sentimentScore,url,author,published,micros,slug,createdBy) VALUES ('${productSlug}','${publicationSlug}','${title}','${description}','${sentiment}',${sentimentScore},'${url}','${author}','${published}',${micros},'${slug}','${username}')`
+                sql = `INSERT into reviews (productSlug,publicationSlug,title,description,avatar,avatarSrc,stars,fakespot,verified,sentimentScore,url,author,published,location,micros,slug,createdBy) VALUES ('${productSlug}','${publicationSlug}','${title}','${description}','${avatar}','${avatarSrc}','${stars}','${fakespot}','${verified}',${sentimentScore},'${url}','${author}','${published}','${location}',${micros},'${slug}','${username}')`
                 let res = false;
                 try {
-                    res = await query(`INSERT into reviews (productSlug,publicationSlug,title,description,sentiment,sentimentScore,url,author,published,micros,slug,createdBy) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`, [productSlug, publicationSlug, title, description, sentiment, sentimentScore, url, author, published, micros, slug, username]);
+                    res = await query(`INSERT into reviews (productSlug,publicationSlug,title,description,avatar,avatarSrc,stars,fakespot,verified,sentimentScore,url,author,published,location,micros,slug,createdBy) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, [productSlug, publicationSlug, title, description, avatar, avatarSrc, stars, fakespot, verified, sentimentScore, url, author, published, location, micros, slug, username]);
                 }
                 catch (x) {
                     l("HANDLED DB EXCEPTION:", x)
@@ -698,7 +743,7 @@ const dbReview = async ({ query, sessionid, threadid, review, username, action }
                     }
                 }
                 else {
-                    let cap = JSON.stringify({ productSlug, publicationSlug, title, published, author, sentiment, sentimentScore, description, url, micros, username, slug });
+                    let cap = JSON.stringify({ productSlug, publicationSlug, title, published, author, stars, sentimentScore, description, url, micros, username, slug });
                     result = {
                         success: false,
                         message: `Unable to insert review with slug ${slug}, update values ${cap}`
@@ -731,7 +776,7 @@ const dbPublication = async ({ query, sessionid, threadid, publication, username
     switch (action) {
         /*  case 'remove':
               //Check if has children
-              sql = `SELECT slug from categories where parentSLug='${slug}'`;
+              sql = `SELECT slug from categories where parentSlug='${slug}'`;
               rows = await query(`SELECT slug from categories where parentSlug=?`, [slug]);
               await dbLog({ query, type: 'SQL', body: `{sql:${sql}, res:${rows ? JSON.stringify(rows, null, 4) : 'null'}}`, threadid, sessionid, username });
               if (rows && rows.length)
@@ -763,7 +808,7 @@ const dbPublication = async ({ query, sessionid, threadid, publication, username
             if (rows && rows.length) {
                 result = {
                     success: true,
-                    findexarCategprySlug: rows[0].findexarCategprySlug
+                    findexarCategorySlug: rows[0].findexarCategorySlug
                 }
             }
             else {
@@ -824,7 +869,7 @@ const dbPublication = async ({ query, sessionid, threadid, publication, username
             if (rows && rows.length) {
                 result = {
                     success: true,
-                    product: rows[0]
+                    publication: rows[0]
                 }
             }
             else {
@@ -944,7 +989,7 @@ const dbPublication = async ({ query, sessionid, threadid, publication, username
                 if (res) {
                     if (res.micros < micros) {
                         sql = `UPDATE publications set name='${name}', description='${description}',image='${image}',imageSrc='${imageSrc}',cdn='${cdn}',url='${url}',active='${active}', handler='${handler}',crawlerEntryUrl='${crawlerEntryUrl}', micros=${micros},updatedBy=${username}, sentimentWeight=${sentimentWeight},updated=now() where slug='${slug}`;
-                        res = await query(`UPDATE  products set name=?,description=?,image=?,imageSrc=?,cdn=?,url=?,active=?,handler=?,crawlerEntryUrl=?,micros=?,updatedBy=?,sentimentWeight=?,updated=now()  where slug=?`, [name, description, image, imageSrc, cdn, url, active, handler, crawlerEntryUrl, micros, username, sentimentWeight, slug]);
+                        res = await query(`UPDATE  publications set name=?,description=?,image=?,imageSrc=?,cdn=?,url=?,active=?,handler=?,crawlerEntryUrl=?,micros=?,updatedBy=?,sentimentWeight=?,updated=now()  where slug=?`, [name, description, image, imageSrc, cdn, url, active, handler, crawlerEntryUrl, micros, username, sentimentWeight, slug]);
                         await dbLog({ query, type: 'SQL', body: `{sql:${sql}, res:${res ? JSON.stringify(res, null, 4) : 'null'}}`, threadid, sessionid, username });
                         if (res && res.affectedRows) {
                             result = {
@@ -1018,7 +1063,7 @@ const dbBrand = async ({ query, sessionid, threadid, brand, username, action }) 
     switch (action) {
         /*  case 'remove':
               //Check if has children
-              sql = `SELECT slug from categories where parentSLug='${slug}'`;
+              sql = `SELECT slug from categories where parentSlug='${slug}'`;
               rows = await query(`SELECT slug from categories where parentSlug=?`, [slug]);
               await dbLog({ query, type: 'SQL', body: `{sql:${sql}, res:${rows ? JSON.stringify(rows, null, 4) : 'null'}}`, threadid, sessionid, username });
               if (rows && rows.length)
@@ -1050,7 +1095,7 @@ const dbBrand = async ({ query, sessionid, threadid, brand, username, action }) 
             if (rows && rows.length) {
                 result = {
                     success: true,
-                    product: rows[0]
+                    brand: rows[0]
                 }
             }
             else {

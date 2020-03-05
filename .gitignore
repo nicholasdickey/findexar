@@ -27,3 +27,4 @@ yarn-error.log*
 /jest/db/run.sh
 ./jest.sh
 
+/src/api/reindex.sh
